@@ -31,7 +31,8 @@ const COLUMNS = [
   { key: 'description', label: 'Description', cls: 'desc' },
   { key: 'category', label: 'Category', cls: 'cat' },
   { key: 'amount', label: 'Amount', cls: 'num amount' },
-  { key: 'tax', label: `Tax (${Math.round(TAX_RATE * 100)}%)`, cls: 'num' },
+  // Editable in Work Expenses, so the header doesn't assert the rate.
+  { key: 'tax', label: 'Tax', cls: 'num' },
 ];
 
 /**
@@ -383,7 +384,9 @@ function renderMeta() {
     ['Period', state.meta.period],
     ['Expenses', `${charges.length}`],
     ['Total', money.format(total), true],
-    [`Tax (${Math.round(TAX_RATE * 100)}%)`, money.format(round2(total * TAX_RATE)), true],
+    // Summed from the rows rather than taken as a flat percentage, so manual
+    // tax edits are reflected here too.
+    ['Tax', money.format(sum(charges, 'tax')), true],
   ];
 
   el.meta.replaceChildren();
@@ -506,7 +509,9 @@ function buildRow(t, isWorkRow, columns) {
         td.textContent = money.format(t.amount);
         break;
       case 'tax':
-        td.textContent = money.format(t.tax);
+        // Editable only where it matters — the rows being claimed.
+        if (isWorkRow) td.append(buildTaxCell(t));
+        else td.textContent = money.format(t.tax);
         break;
       default:
         td.textContent = t[col.key] ?? '';
@@ -514,6 +519,85 @@ function buildRow(t, isWorkRow, columns) {
     tr.append(td);
   }
   return tr;
+}
+
+/** What the tax would be at the standard rate, before any manual override. */
+function defaultTax(t) {
+  return round2(t.amount * TAX_RATE);
+}
+
+/**
+ * Tax is editable per row — some receipts carry no recoverable tax at all, so it
+ * has to be possible to zero or correct it. Reads as plain text until hovered or
+ * focused, so the table still scans as a table.
+ */
+function buildTaxCell(t) {
+  const wrap = document.createElement('div');
+  wrap.className = 'tax-cell';
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.inputMode = 'decimal';
+  input.className = 'tax-input';
+  input.value = t.tax.toFixed(2);
+  input.setAttribute('aria-label', 'Tax amount');
+
+  const reset = document.createElement('button');
+  reset.type = 'button';
+  reset.className = 'tax-reset';
+  reset.textContent = '↺';
+
+  // Styling and tooltips only — safe to call while the row is still being built.
+  const paint = () => {
+    const edited = Math.abs(t.tax - defaultTax(t)) > 0.005;
+    t.taxEdited = edited;
+    input.classList.toggle('is-edited', edited);
+    input.title = edited
+      ? `Edited — ${Math.round(TAX_RATE * 100)}% would be ${money.format(defaultTax(t))}`
+      : `${Math.round(TAX_RATE * 100)}% of the amount. Edit to override.`;
+    reset.hidden = !edited;
+    reset.title = `Reset to ${money.format(defaultTax(t))}`;
+  };
+
+  const sync = () => {
+    paint();
+    // The tax total lives in the table footer, and the statement summary sums
+    // tax too — both need refreshing, neither touches this input.
+    refreshWorkFooter();
+    renderMeta();
+  };
+
+  const commit = () => {
+    const raw = input.value.trim();
+    // Blank means zero — that is the point of being able to clear it.
+    const parsed = raw === '' ? 0 : Number(raw.replace(/[^0-9.-]/g, ''));
+    t.tax = Number.isFinite(parsed) ? round2(parsed) : defaultTax(t);
+    input.value = t.tax.toFixed(2);
+    sync();
+  };
+
+  input.addEventListener('focus', () => input.select());
+  input.addEventListener('change', commit);
+  input.addEventListener('blur', commit);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      input.blur();
+    } else if (e.key === 'Escape') {
+      input.value = t.tax.toFixed(2);
+      input.blur();
+    }
+  });
+
+  reset.addEventListener('click', () => {
+    t.tax = defaultTax(t);
+    input.value = t.tax.toFixed(2);
+    sync();
+  });
+
+  wrap.append(input, reset);
+  paint();
+  return wrap;
 }
 
 /**

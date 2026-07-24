@@ -389,6 +389,59 @@ main { max-width: 1180px; margin: 0 auto; }
   cursor: pointer;
 }
 
+/* Editable tax cell ------------------------------------------------------- */
+
+.tax-cell {
+  display: flex;
+  gap: 0.15rem;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+/* Reads as text until you reach for it, so the column still scans cleanly. */
+.tax-input {
+  width: 5.2rem;
+  padding: 0.15rem 0.35rem;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.88rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.tax-input:hover {
+  border-color: var(--line-strong);
+  background: var(--raised);
+}
+
+.tax-input:focus {
+  border-color: var(--accent);
+  background: var(--raised);
+  outline: none;
+}
+
+.tax-input.is-edited {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.tax-reset {
+  padding: 0 0.2rem;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--ink-muted);
+  font-size: 0.85rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.tax-reset:hover { color: var(--accent); }
+.tax-reset[hidden] { display: none; }
+
 /* Expense category select ------------------------------------------------- */
 
 .expcat__select {

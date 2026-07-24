@@ -32,8 +32,12 @@ Then open <http://localhost:8912/index.html> and drop in a statement PDF.
 - **Workday flag** — the `Day` column shows the weekday the transaction was made,
   as a green pill for Mon–Fri and a grey one for Sat/Sun. "Workdays only" in the
   filter bar hides weekend rows.
-- **Tax** — a per-row column and a total, calculated as **13% of the amount**
-  (see the note below).
+- **Tax** — a per-row column and a total, defaulting to **13% of the amount**
+  (see the note below). Editable per row in *Work Expenses*: click the value to
+  correct it, or clear it to zero for a receipt with no recoverable tax. An
+  overridden value is shown in colour with a `↺` to restore the default. The
+  subtotal written to the template follows it, so the template's balance check
+  still comes out right.
 - **Filters** — free-text search, spend category, workdays only, and a toggle to
   include statement payments (hidden by default, since they aren't expenses).
 - **Fill template** for either table — writes your line items into your real
@@ -151,7 +155,8 @@ from your machine at export time and never uploaded.
 
 ## A note on the tax column
 
-The tax column is `amount × 0.13`, as specified.
+The tax column starts at `amount × 0.13`, as specified, and each row in
+*Work Expenses* can be edited or zeroed from there.
 
 Worth knowing: card statement amounts are what you actually paid, so they already
 include sales tax. If you want the HST *contained in* a total rather than 13%
