@@ -69,7 +69,11 @@
           <h2>Work Expenses</h2>
           <button type="button" id="export-work" class="btn" disabled>Fill template</button>
         </div>
-        <p class="hint">Tick a row in <em>All Expenses</em> below to move it up here. Untick to send it back.</p>
+        <p class="hint">
+          Tick a row in <em>All Expenses</em> below to move it up here. Untick to send it back.
+          <span id="mappings-note" class="hint__note"></span>
+          <button type="button" id="mappings-clear" class="link-btn" hidden>Forget them</button>
+        </p>
         <div class="table-scroll">
           <table id="work-table" class="expenses">
             <thead></thead>

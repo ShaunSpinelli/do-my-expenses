@@ -29,6 +29,31 @@ export const FIRST_ITEM_ROW = 13;
 export const LAST_ITEM_ROW = 45;
 export const CAPACITY = LAST_ITEM_ROW - FIRST_ITEM_ROW + 1;
 
+/**
+ * The template's per-category columns, in sheet order — row 10's headers.
+ * Choosing one of these for a line item puts that row's subtotal in it, which
+ * is what makes the template's own balance check (column Q) come out at zero.
+ *
+ * The other labels in the template's "Finance-for booking entry" block —
+ * "HST on Meals", "HST", "employee", and its second "MEALS" — are not options
+ * here: that block is entirely formula-driven (rows 49-61 read the column
+ * totals from row 46), so those figures are computed, not assigned per row.
+ */
+export const EXPENSE_CATEGORIES = [
+  { label: 'AIRLINE', column: 'H' },
+  { label: 'TOLL/407ETR', column: 'I' },
+  { label: 'MEALS', column: 'J' },
+  { label: 'TAXI/UBER/PARKING', column: 'K' },
+  { label: 'GAS', column: 'L' },
+  { label: 'SALES EXPENSE', column: 'M' },
+  { label: 'ACCOMMODATIONS/HOTEL', column: 'N' },
+  { label: 'MARKETING', column: 'O' },
+  { label: 'OTHER', column: 'P' },
+];
+
+const CATEGORY_COLUMNS = EXPENSE_CATEGORIES.map((c) => c.column);
+const COLUMN_FOR_CATEGORY = new Map(EXPENSE_CATEGORIES.map((c) => [c.label, c.column]));
+
 /** Excel's epoch is 1899-12-30 (it treats 1900 as a leap year). */
 const EXCEL_EPOCH = Date.UTC(1899, 11, 30);
 
@@ -81,12 +106,21 @@ function writeRow(xml, rowNumber, t) {
   next = setCell(next, `D${rowNumber}`, stringCell(describe(t)));
   next = setCell(next, `E${rowNumber}`, numberCell(round2(t.amount)));
   next = setCell(next, `F${rowNumber}`, numberCell(round2(t.tax)));
+
+  // The chosen expense category decides which of H..P carries the subtotal
+  // (total less tax). Every other category column on the row is left empty, so
+  // SUM(H:P) equals the row's SUBTOTAL and the template's check reads OK.
+  const target = COLUMN_FOR_CATEGORY.get(t.expenseCategory);
+  const subtotal = round2(round2(t.amount) - round2(t.tax));
+  for (const col of CATEGORY_COLUMNS) {
+    next = setCell(next, `${col}${rowNumber}`, numberCell(col === target ? subtotal : null));
+  }
   return next;
 }
 
 function clearRow(xml, rowNumber) {
   let next = xml;
-  for (const col of ['B', 'C', 'D', 'E', 'F']) {
+  for (const col of ['B', 'C', 'D', 'E', 'F', ...CATEGORY_COLUMNS]) {
     next = setCell(next, `${col}${rowNumber}`, () => ({}));
   }
   return next;

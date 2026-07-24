@@ -26,7 +26,9 @@ Then open <http://localhost:8912/index.html> and drop in a statement PDF.
 
 - **All Expenses** — every transaction found in the statement.
 - **Work Expenses** — tick a row's checkbox in *All Expenses* and it moves here;
-  untick it to send it back. Each table totals its own rows.
+  untick it to send it back. Each table totals its own rows. This table adds an
+  **Expense Category** dropdown that routes the row's subtotal into the matching
+  template column (see below).
 - **Workday flag** — the `Day` column shows the weekday the transaction was made,
   as a green pill for Mon–Fri and a grey one for Sat/Sun. "Workdays only" in the
   filter bar hides weekend rows.
@@ -60,7 +62,7 @@ validations, column widths, print setup, the pre-built `SUBTOTAL`/check/total
 formulas, the GL-code rows and the other worksheets all survive exactly as the
 template author left them.
 
-Five cells are written per line item row:
+These cells are written per line item row:
 
 | Column | Value |
 |---|---|
@@ -69,12 +71,60 @@ Five cells are written per line item row:
 | `D` Description | the statement's own spend category |
 | `E` TOTAL | amount |
 | `F` HST/GST | tax |
+| one of `H`–`P` | the row's subtotal, in the column its **Expense Category** names |
 
 Everything else is left to the template: `G` (SUBTOTAL), `Q`/`R` (the balance
 check) and the totals row keep their own formulas, and the workbook is flagged to
-recalculate on open so they pick up the new numbers. The per-category columns
-(`H`–`P`), the GL-code row and the `Name`/`Department`/`Date` header fields are
-not touched.
+recalculate on open so they pick up the new numbers. The GL-code row and the
+`Name`/`Department`/`Date` header fields are not touched.
+
+## Expense categories
+
+The **Work Expenses** table has an *Expense Category* dropdown per row. It names
+which of the template's `H`–`P` columns receives that row's subtotal
+(`TOTAL - HST/GST`), which is what makes the template's own check in column `Q`
+come out at zero and column `R` read `OK`:
+
+`AIRLINE` · `TOLL/407ETR` · `MEALS` · `TAXI/UBER/PARKING` · `GAS` ·
+`SALES EXPENSE` · `ACCOMMODATIONS/HOTEL` · `MARKETING` · `OTHER`
+
+Exactly one category column is written per row; the rest are left empty.
+
+Unset rows are highlighted in the table, counted in the table footer, and called
+out on export; their subtotal goes into no column, so the template flags them
+`PLEASE REVIEW` itself.
+
+### Remembered choices
+
+Choices are remembered in `localStorage`, so each one only has to be made once.
+Two rules are recorded per pick and consulted in this order:
+
+1. **by merchant** — precise: *this shop is always MEALS*
+2. **by statement category** — the fallback: *anything `Restaurants` is MEALS*
+
+A miss in both leaves the row for you to pick. The footer under *Work Expenses*
+shows how many rules are held, with a **Forget them** link to wipe them.
+
+Statement descriptions embed a per-transaction reference — every transit fare
+reads `PRESTO FARE/<unique id> TORONTO ON` — so the raw string would never match
+twice. Merchant rules key off a normalised form that drops phone numbers and
+id-like tokens (6+ characters either mixing letters and digits, or all letters
+with no vowel). On the sample statement that folds all eight transit fares onto
+one key while leaving real merchant names alone.
+
+The category rule holds the **most recent** choice for that statement category.
+So if you book one restaurant row to `SALES EXPENSE` for a client dinner, the
+`Restaurants` fallback becomes `SALES EXPENSE` — but every restaurant you had
+already pinned keeps its own merchant rule, because merchant wins over category.
+Clearing a row's category forgets its merchant rule and leaves the category rule
+alone.
+
+> The template's "Finance-for booking entry" block also lists `HST on Meals`,
+> `HST`, `employee` and a second `MEALS`. Those are **not** dropdown options,
+> because that whole block is formula-driven — rows 49–61 read the column totals
+> from row 46, `HST` is `=+F46`, `employee` is `=+E46`, and the second `MEALS` row
+> derives the meal-HST share with a `SUMPRODUCT`. They are computed, not assigned
+> per line item.
 
 The template holds **33 line items** (rows 13–45). If a table has more rows than
 that, the export fills what fits and tells you exactly how many were left out —
@@ -118,6 +168,7 @@ src/app.js              UI: upload, filters, tables, selection, export
 src/parser.js           PDF → transaction rows (no DOM dependencies)
 src/template.js         writes line items into the template's sheet XML
 src/zip.js              minimal ZIP read/write, preserving untouched parts
+src/mappings.js         remembered merchant/category -> expense category rules
 vendor/pdfjs/           pdf.js 6.1.200, vendored so there's no CDN or install step
 .nojekyll               stops GitHub Pages running the files through Jekyll
 ```

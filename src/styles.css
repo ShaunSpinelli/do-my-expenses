@@ -13,6 +13,9 @@
   --weekend-bg: #eeedea;
   --weekend-ink: #5c5b56;
   --danger: #b4231f;
+  --warn-bg: #fdf4e3;
+  --warn-ink: #7a4f10;
+  --warn-line: #dda94a;
   --radius: 10px;
 }
 
@@ -32,6 +35,9 @@
     --weekend-bg: #26262b;
     --weekend-ink: #a5a49d;
     --danger: #f08b88;
+    --warn-bg: #33280f;
+    --warn-ink: #f0cd8a;
+    --warn-line: #7a5f22;
   }
 }
 
@@ -369,6 +375,39 @@ main { max-width: 1180px; margin: 0 auto; }
 }
 
 .expenses tfoot td.label { color: var(--ink-muted); font-weight: 600; }
+
+.hint__note { color: var(--ink-soft); }
+
+.link-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.82rem;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* Expense category select ------------------------------------------------- */
+
+.expcat__select {
+  max-width: 15rem;
+  padding: 0.2rem 0.35rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--raised);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.82rem;
+}
+
+/* Unset is a real state here — the subtotal has nowhere to go until it's set. */
+.expcat__select.is-unset {
+  border-color: var(--warn-line);
+  background: var(--warn-bg);
+  color: var(--warn-ink);
+}
 
 /* Workday pill ------------------------------------------------------------ */
 

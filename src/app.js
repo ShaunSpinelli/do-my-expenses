@@ -1,6 +1,14 @@
 import * as pdfjs from '../vendor/pdfjs/pdf.min.mjs';
 import { parseStatement } from './parser.js';
-import { fillTemplate, CAPACITY } from './template.js';
+import { fillTemplate, CAPACITY, EXPENSE_CATEGORIES } from './template.js';
+import {
+  loadMappings,
+  clearMappings,
+  suggestCategory,
+  rememberCategory,
+  forgetMerchant,
+  countMappings,
+} from './mappings.js';
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   '../vendor/pdfjs/pdf.worker.min.mjs',
@@ -26,6 +34,16 @@ const COLUMNS = [
   { key: 'tax', label: `Tax (${Math.round(TAX_RATE * 100)}%)`, cls: 'num' },
 ];
 
+/**
+ * The Work Expenses table adds the template's expense category, which decides
+ * which of the template's H..P columns receives the row's subtotal.
+ */
+const WORK_COLUMNS = [
+  ...COLUMNS.slice(0, 4),
+  { key: 'expenseCategory', label: 'Expense Category', cls: 'expcat' },
+  ...COLUMNS.slice(4),
+];
+
 /** Where the chosen template is remembered between visits. */
 const TEMPLATE_KEY = 'expense-report-template';
 
@@ -34,6 +52,8 @@ const state = {
   meta: {},
   /** {name, bytes} of the expense report template, once chosen */
   template: null,
+  /** remembered merchant/category -> expense category choices */
+  mappings: loadMappings(),
   /** ids moved into the Work Expenses table */
   workIds: new Set(),
   filters: { query: '', category: '', workdaysOnly: false, showPayments: false },
@@ -66,7 +86,25 @@ const el = {
   templateBrowse: document.getElementById('template-browse'),
   templateClear: document.getElementById('template-clear'),
   templateState: document.getElementById('template-state'),
+  mappingsNote: document.getElementById('mappings-note'),
+  mappingsClear: document.getElementById('mappings-clear'),
 };
+
+/* ---------------------------------------------------------------- mappings */
+
+el.mappingsClear.addEventListener('click', () => {
+  state.mappings = clearMappings();
+  renderMappingsNote();
+  setStatus('Forgot all remembered expense categories.');
+});
+
+function renderMappingsNote() {
+  const count = countMappings(state.mappings);
+  el.mappingsNote.textContent = count
+    ? `Remembering ${count} expense category ${count === 1 ? 'rule' : 'rules'}.`
+    : '';
+  el.mappingsClear.hidden = count === 0;
+}
 
 /* ---------------------------------------------------------------- template */
 
@@ -222,6 +260,8 @@ async function loadFile(file) {
     transactions.forEach((t, i) => {
       t.id = `t${i}`;
       t.tax = round2(t.amount * TAX_RATE);
+      // Merchant first, then statement category, then left for the user.
+      t.expenseCategory = suggestCategory(state.mappings, t);
     });
 
     state.transactions = transactions;
@@ -321,6 +361,7 @@ function render() {
     sortKey: 'work',
     checked: true,
     emptyEl: el.workEmpty,
+    columns: WORK_COLUMNS,
   });
   renderTable({
     table: el.allTable,
@@ -328,6 +369,7 @@ function render() {
     sortKey: 'all',
     checked: false,
     emptyEl: el.allEmpty,
+    columns: COLUMNS,
   });
 }
 
@@ -358,7 +400,7 @@ function renderMeta() {
   }
 }
 
-function renderTable({ table, rows, sortKey, checked, emptyEl }) {
+function renderTable({ table, rows, sortKey, checked, emptyEl, columns }) {
   const sort = state.sort[sortKey];
 
   // Header
@@ -368,7 +410,7 @@ function renderTable({ table, rows, sortKey, checked, emptyEl }) {
   checkTh.setAttribute('aria-label', checked ? 'Remove' : 'Add to work expenses');
   headRow.append(checkTh);
 
-  for (const col of COLUMNS) {
+  for (const col of columns) {
     const th = document.createElement('th');
     th.className = `sortable ${col.cls}`.trim();
     th.textContent = col.label;
@@ -392,18 +434,18 @@ function renderTable({ table, rows, sortKey, checked, emptyEl }) {
 
   // Body
   const body = document.createElement('tbody');
-  for (const t of rows) body.append(buildRow(t, checked));
+  for (const t of rows) body.append(buildRow(t, checked, columns));
   table.tBodies[0].replaceWith(body);
 
   // Footer
-  table.tFoot.replaceChildren(buildFooter(rows));
+  table.tFoot.replaceChildren(buildFooter(rows, columns, table));
 
   const isEmpty = rows.length === 0;
   table.closest('.table-scroll').hidden = isEmpty;
   if (emptyEl) emptyEl.hidden = !isEmpty;
 }
 
-function buildRow(t, isWorkRow) {
+function buildRow(t, isWorkRow, columns) {
   const tr = document.createElement('tr');
   if (t.amount < 0) tr.classList.add('is-credit');
   if (t.type === 'payment') tr.classList.add('is-payment');
@@ -415,18 +457,26 @@ function buildRow(t, isWorkRow) {
   box.checked = isWorkRow;
   box.title = isWorkRow ? 'Move back to All Expenses' : 'Move to Work Expenses';
   box.addEventListener('change', () => {
-    if (box.checked) state.workIds.add(t.id);
-    else state.workIds.delete(t.id);
+    if (box.checked) {
+      state.workIds.add(t.id);
+      // Pick up any rule learned since this statement was loaded.
+      if (!t.expenseCategory) t.expenseCategory = suggestCategory(state.mappings, t);
+    } else {
+      state.workIds.delete(t.id);
+    }
     render();
   });
   checkTd.append(box);
   tr.append(checkTd);
 
-  for (const col of COLUMNS) {
+  for (const col of columns) {
     const td = document.createElement('td');
     if (col.cls) td.className = col.cls;
 
     switch (col.key) {
+      case 'expenseCategory':
+        td.append(buildCategorySelect(t));
+        break;
       case 'transDate':
         td.textContent = t.transDate || t.transDateRaw;
         break;
@@ -466,15 +516,70 @@ function buildRow(t, isWorkRow) {
   return tr;
 }
 
-function buildFooter(rows) {
+/**
+ * A row's expense category decides which template column its subtotal lands in,
+ * so it has to be chosen per row. Left unset on purpose rather than guessed —
+ * a wrong guess books the amount to the wrong GL account.
+ */
+function buildCategorySelect(t) {
+  const select = document.createElement('select');
+  select.className = 'expcat__select';
+  select.title = 'Template column this row’s subtotal goes into';
+
+  const blank = document.createElement('option');
+  blank.value = '';
+  blank.textContent = '— pick —';
+  select.append(blank);
+
+  for (const { label } of EXPENSE_CATEGORIES) {
+    const option = document.createElement('option');
+    option.value = label;
+    option.textContent = label;
+    select.append(option);
+  }
+
+  select.value = t.expenseCategory ?? '';
+  select.classList.toggle('is-unset', !select.value);
+
+  select.addEventListener('change', () => {
+    t.expenseCategory = select.value || null;
+    select.classList.toggle('is-unset', !select.value);
+
+    // Learn from the choice so this merchant — and anything else in the same
+    // statement category — is filled in next time.
+    if (t.expenseCategory) rememberCategory(state.mappings, t, t.expenseCategory);
+    else forgetMerchant(state.mappings, t);
+    renderMappingsNote();
+
+    // Only the footer's "needs a category" count depends on this, so update
+    // that in place — re-rendering would drop the user out of the select.
+    refreshWorkFooter();
+  });
+
+  return select;
+}
+
+function refreshWorkFooter() {
+  el.workTable.tFoot.replaceChildren(
+    buildFooter(workRows(), WORK_COLUMNS, el.workTable),
+  );
+}
+
+function buildFooter(rows, columns, table) {
   const tr = document.createElement('tr');
   const label = document.createElement('td');
   label.className = 'label';
-  label.colSpan = COLUMNS.length - 1; // checkbox + all but Amount/Tax
+  label.colSpan = columns.length - 1; // checkbox + all but Amount/Tax
   const workdays = rows.filter((r) => r.isWorkday).length;
-  label.textContent =
-    `${rows.length} ${rows.length === 1 ? 'row' : 'rows'} · ` +
-    `${workdays} on workdays`;
+  const parts = [
+    `${rows.length} ${rows.length === 1 ? 'row' : 'rows'}`,
+    `${workdays} on workdays`,
+  ];
+  if (table === el.workTable) {
+    const unset = rows.filter((r) => !r.expenseCategory).length;
+    if (unset) parts.push(`${unset} need an expense category`);
+  }
+  label.textContent = parts.join(' · ');
 
   const total = document.createElement('td');
   total.className = 'num';
@@ -540,14 +645,24 @@ async function downloadReport(rows, basename) {
     a.click();
     URL.revokeObjectURL(url);
 
+    const notes = [];
     if (dropped.length) {
       // Never let rows disappear quietly.
-      setStatus(
-        `Wrote ${written} line items to ${filename}, but the template only holds ` +
-          `${CAPACITY}. ${dropped.length} row(s) did not fit and were left out — ` +
-          `narrow the selection or export in batches.`,
-        true,
+      notes.push(
+        `the template only holds ${CAPACITY}, so ${dropped.length} row(s) did not ` +
+          `fit and were left out — narrow the selection or export in batches`,
       );
+    }
+    const unset = rows.slice(0, written).filter((t) => !t.expenseCategory).length;
+    if (unset) {
+      notes.push(
+        `${unset} row(s) have no expense category, so their subtotal went into no ` +
+          `column and the template will flag them "PLEASE REVIEW"`,
+      );
+    }
+
+    if (notes.length) {
+      setStatus(`Wrote ${written} line items to ${filename}, but ${notes.join('; and ')}.`, true);
     } else {
       setStatus(`Wrote ${written} line ${written === 1 ? 'item' : 'items'} to ${filename}.`);
     }
@@ -568,3 +683,4 @@ function round2(n) {
 }
 
 initTemplate();
+renderMappingsNote();
