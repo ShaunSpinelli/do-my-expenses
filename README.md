@@ -17,10 +17,10 @@ python3 -m http.server 8912
 
 Then open <http://localhost:8912/index.html> and drop in a statement PDF.
 
-> `.gitignore` excludes `*.pdf`. GitHub Pages serves repo contents publicly even
-> when the repo is private, so a real statement committed here would be fetchable
-> by anyone who guessed the filename. Keep statements local — the app reads them
-> in your browser and never uploads them, so nothing needs to be committed.
+> `.gitignore` excludes `*.pdf` and `*.xlsx`. GitHub Pages serves repo contents
+> publicly, so a real statement or the expense report template committed here
+> would be fetchable by anyone who guessed the filename. Keep both local — the app
+> reads them in your browser and never uploads them, so nothing needs committing.
 
 ## What you get
 
@@ -39,9 +39,19 @@ Then open <http://localhost:8912/index.html> and drop in a statement PDF.
 
 ## Filling the expense report template
 
-Load your `.xlsx` expense report template once with **Choose template**; it is
-remembered on your device so you don't have to pick it again. Then **Fill
-template** on either table downloads a filled copy.
+Drop your expense report template in the project root as **`template.xlsx`** and
+the app loads it automatically as the default — no picking needed. Otherwise
+**Choose template** picks one, and it's remembered on your device (a template you
+pick yourself always wins over the bundled default, since yours may be newer).
+Then **Fill template** on either table downloads a filled copy.
+
+`template.xlsx` is **gitignored on purpose**, so the default only exists where you
+put the file — locally. It is an internal document: besides the grid it carries the
+GL chart of accounts, the department list, the finance process notes and the
+original author's name in its metadata. This repo is public and its history is
+permanent, so the file is not committed. The deployed site therefore asks you to
+pick it once. The template's own instructions also say to always take the latest
+copy from SharePoint, so a committed snapshot would go stale anyway.
 
 The template is used *as-is*. The app opens its `.xlsx` package, rewrites only
 `xl/worksheets/sheet1.xml` and `xl/workbook.xml`, and copies every other part of
@@ -73,6 +83,12 @@ it never truncates silently.
 New strings are written as inline strings rather than added to
 `xl/sharedStrings.xml`, since appending there would mean renumbering every
 existing reference.
+
+Because the template is patched rather than regenerated, a revised template drops
+straight in — no code change needed, as long as the line-item block still starts at
+row 13 with `Date / Supplier / Description / TOTAL / HST/GST` in columns B–F. If it
+doesn't, the export fails loudly naming the cell it couldn't find, rather than
+writing values into the wrong columns.
 
 > A spreadsheet library was the other option here, and it was rejected: reading
 > and re-writing the workbook through one drops the features it doesn't model —

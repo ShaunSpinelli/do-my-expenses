@@ -81,7 +81,7 @@ el.templateInput.addEventListener('change', async () => {
   setStatus(`Template loaded: ${file.name}`);
 });
 
-el.templateClear.addEventListener('click', () => {
+el.templateClear.addEventListener('click', async () => {
   state.template = null;
   try {
     localStorage.removeItem(TEMPLATE_KEY);
@@ -89,8 +89,36 @@ el.templateClear.addEventListener('click', () => {
     /* storage unavailable — nothing cached to clear */
   }
   el.templateInput.value = '';
+  // Fall back to the bundled template if the site ships one.
+  await loadBundledTemplate();
   renderTemplateState();
 });
+
+/**
+ * A `template.xlsx` sitting next to index.html is used as the default, so the
+ * common case needs no file picking. A template the user chose themselves wins
+ * over it — theirs may be newer.
+ */
+async function loadBundledTemplate() {
+  try {
+    const url = new URL('../template.xlsx', import.meta.url);
+    const response = await fetch(url);
+    if (!response.ok) return false;
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (!bytes.length) return false;
+    state.template = { name: 'template.xlsx', bytes, bundled: true };
+    return true;
+  } catch {
+    // No bundled template (or opened over file://) — the picker still works.
+    return false;
+  }
+}
+
+async function initTemplate() {
+  restoreTemplate();
+  if (!state.template) await loadBundledTemplate();
+  renderTemplateState();
+}
 
 /**
  * The template stays on this machine — it is kept in localStorage purely so it
@@ -122,11 +150,19 @@ function restoreTemplate() {
 
 function renderTemplateState() {
   const loaded = Boolean(state.template);
-  el.templateState.textContent = loaded
-    ? `Using ${state.template.name} — remembered on this device. Holds up to ${CAPACITY} line items.`
-    : 'Not loaded — pick your .xlsx template to enable export.';
+  if (!loaded) {
+    el.templateState.textContent = 'Not loaded — pick your .xlsx template to enable export.';
+  } else {
+    const origin = state.template.bundled
+      ? 'the default bundled with this site'
+      : 'your copy, remembered on this device';
+    el.templateState.textContent =
+      `Using ${state.template.name} — ${origin}. Holds up to ${CAPACITY} line items.`;
+  }
   el.templateState.classList.toggle('is-ready', loaded);
-  el.templateClear.hidden = !loaded;
+  el.templateBrowse.textContent = loaded ? 'Use a different one' : 'Choose template';
+  // "Forget" only makes sense for a template the user picked.
+  el.templateClear.hidden = !loaded || Boolean(state.template.bundled);
   el.exportAll.disabled = !loaded;
   el.exportWork.disabled = !loaded;
   const title = loaded ? '' : 'Load your expense report template first';
@@ -531,5 +567,4 @@ function round2(n) {
   return Math.round(n * 100) / 100;
 }
 
-restoreTemplate();
-renderTemplateState();
+initTemplate();
