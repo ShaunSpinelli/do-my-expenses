@@ -34,7 +34,54 @@ Then open <http://localhost:8912/index.html> and drop in a statement PDF.
   (see the note below).
 - **Filters** — free-text search, spend category, workdays only, and a toggle to
   include statement payments (hidden by default, since they aren't expenses).
-- **CSV export** for either table.
+- **Fill template** for either table — writes your line items into your real
+  expense report template (see below).
+
+## Filling the expense report template
+
+Load your `.xlsx` expense report template once with **Choose template**; it is
+remembered on your device so you don't have to pick it again. Then **Fill
+template** on either table downloads a filled copy.
+
+The template is used *as-is*. The app opens its `.xlsx` package, rewrites only
+`xl/worksheets/sheet1.xml` and `xl/workbook.xml`, and copies every other part of
+the archive through byte for byte. Sheet protection, conditional formatting, data
+validations, column widths, print setup, the pre-built `SUBTOTAL`/check/total
+formulas, the GL-code rows and the other worksheets all survive exactly as the
+template author left them.
+
+Five cells are written per line item row:
+
+| Column | Value |
+|---|---|
+| `B` Date | transaction date (Excel serial — the column is already date-formatted) |
+| `C` Supplier | merchant string from the statement |
+| `D` Description | the statement's own spend category |
+| `E` TOTAL | amount |
+| `F` HST/GST | tax |
+
+Everything else is left to the template: `G` (SUBTOTAL), `Q`/`R` (the balance
+check) and the totals row keep their own formulas, and the workbook is flagged to
+recalculate on open so they pick up the new numbers. The per-category columns
+(`H`–`P`), the GL-code row and the `Name`/`Department`/`Date` header fields are
+not touched.
+
+The template holds **33 line items** (rows 13–45). If a table has more rows than
+that, the export fills what fits and tells you exactly how many were left out —
+it never truncates silently.
+
+New strings are written as inline strings rather than added to
+`xl/sharedStrings.xml`, since appending there would mean renumbering every
+existing reference.
+
+> A spreadsheet library was the other option here, and it was rejected: reading
+> and re-writing the workbook through one drops the features it doesn't model —
+> sheet protection, conditional formatting, data validations, printer settings.
+> Patching the archive in place is what makes "the exact template" true.
+
+The template file is **not** committed — it is an internal document carrying
+department numbers and GL account lookups, and this repo is public. It is read
+from your machine at export time and never uploaded.
 
 ## A note on the tax column
 
@@ -51,8 +98,10 @@ total that is $115.04 rather than $130.00. Change how `TAX_RATE` is applied in
 ```
 index.html              markup
 src/styles.css          styles (light + dark)
-src/app.js              UI: upload, filters, tables, selection, CSV
+src/app.js              UI: upload, filters, tables, selection, export
 src/parser.js           PDF → transaction rows (no DOM dependencies)
+src/template.js         writes line items into the template's sheet XML
+src/zip.js              minimal ZIP read/write, preserving untouched parts
 vendor/pdfjs/           pdf.js 6.1.200, vendored so there's no CDN or install step
 .nojekyll               stops GitHub Pages running the files through Jekyll
 ```

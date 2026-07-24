@@ -122,6 +122,50 @@ main { max-width: 1180px; margin: 0 auto; }
 
 .btn--primary:hover { color: #fff; filter: brightness(1.08); }
 
+/* Template picker --------------------------------------------------------- */
+
+.template {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 1rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.template__title {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.template__state {
+  margin: 0.25rem 0 0;
+  color: var(--ink-muted);
+  font-size: 0.85rem;
+}
+
+.template__state.is-ready { color: var(--work-ink); }
+
+.template__state code {
+  padding: 0.05rem 0.25rem;
+  border-radius: 4px;
+  background: var(--plane);
+  font-size: 0.95em;
+}
+
+.template__actions { display: flex; gap: 0.5rem; }
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn:disabled:hover { border-color: var(--line-strong); color: var(--ink); }
+
 /* Status ------------------------------------------------------------------ */
 
 .status {

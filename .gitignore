@@ -4,5 +4,11 @@
 # The app never uploads anything, so it does not need a statement committed.
 *.pdf
 
+# The expense report template is an internal company document (it carries
+# department numbers and GL account lookups). This repo is public, so keep it
+# local — the app loads it from your machine at export time and never uploads it.
+*.xlsx
+*.xls
+
 .DS_Store
 node_modules/

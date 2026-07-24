@@ -22,6 +22,19 @@
       <p id="file-name" class="dropzone__file" hidden></p>
     </section>
 
+    <!-- Expense report template ------------------------------------------- -->
+    <section class="template">
+      <input type="file" id="template-input" accept=".xlsx" hidden />
+      <div class="template__text">
+        <h2 class="template__title">Expense report template</h2>
+        <p id="template-state" class="template__state">Not loaded — pick your <code>.xlsx</code> template to enable export.</p>
+      </div>
+      <div class="template__actions">
+        <button type="button" id="template-browse" class="btn">Choose template</button>
+        <button type="button" id="template-clear" class="btn" hidden>Forget</button>
+      </div>
+    </section>
+
     <p id="status" class="status" hidden></p>
     <div id="warnings" class="warnings" hidden></div>
 
@@ -54,7 +67,7 @@
       <section class="table-block">
         <div class="table-block__head">
           <h2>Work Expenses</h2>
-          <button type="button" id="export-work" class="btn">Export CSV</button>
+          <button type="button" id="export-work" class="btn" disabled>Fill template</button>
         </div>
         <p class="hint">Tick a row in <em>All Expenses</em> below to move it up here. Untick to send it back.</p>
         <div class="table-scroll">
@@ -71,7 +84,7 @@
       <section class="table-block">
         <div class="table-block__head">
           <h2>All Expenses</h2>
-          <button type="button" id="export-all" class="btn">Export CSV</button>
+          <button type="button" id="export-all" class="btn" disabled>Fill template</button>
         </div>
         <div class="table-scroll">
           <table id="all-table" class="expenses">

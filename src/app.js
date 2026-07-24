@@ -1,5 +1,6 @@
 import * as pdfjs from '../vendor/pdfjs/pdf.min.mjs';
 import { parseStatement } from './parser.js';
+import { fillTemplate, CAPACITY } from './template.js';
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   '../vendor/pdfjs/pdf.worker.min.mjs',
@@ -25,9 +26,14 @@ const COLUMNS = [
   { key: 'tax', label: `Tax (${Math.round(TAX_RATE * 100)}%)`, cls: 'num' },
 ];
 
+/** Where the chosen template is remembered between visits. */
+const TEMPLATE_KEY = 'expense-report-template';
+
 const state = {
   transactions: [],
   meta: {},
+  /** {name, bytes} of the expense report template, once chosen */
+  template: null,
   /** ids moved into the Work Expenses table */
   workIds: new Set(),
   filters: { query: '', category: '', workdaysOnly: false, showPayments: false },
@@ -56,7 +62,77 @@ const el = {
   workEmpty: document.getElementById('work-empty'),
   exportAll: document.getElementById('export-all'),
   exportWork: document.getElementById('export-work'),
+  templateInput: document.getElementById('template-input'),
+  templateBrowse: document.getElementById('template-browse'),
+  templateClear: document.getElementById('template-clear'),
+  templateState: document.getElementById('template-state'),
 };
+
+/* ---------------------------------------------------------------- template */
+
+el.templateBrowse.addEventListener('click', () => el.templateInput.click());
+el.templateInput.addEventListener('change', async () => {
+  const file = el.templateInput.files?.[0];
+  if (!file) return;
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  state.template = { name: file.name, bytes };
+  rememberTemplate(state.template);
+  renderTemplateState();
+  setStatus(`Template loaded: ${file.name}`);
+});
+
+el.templateClear.addEventListener('click', () => {
+  state.template = null;
+  try {
+    localStorage.removeItem(TEMPLATE_KEY);
+  } catch {
+    /* storage unavailable — nothing cached to clear */
+  }
+  el.templateInput.value = '';
+  renderTemplateState();
+});
+
+/**
+ * The template stays on this machine — it is kept in localStorage purely so it
+ * doesn't have to be re-picked on every visit, and never leaves the browser.
+ */
+function rememberTemplate({ name, bytes }) {
+  try {
+    let binary = '';
+    for (const byte of bytes) binary += String.fromCharCode(byte);
+    localStorage.setItem(TEMPLATE_KEY, JSON.stringify({ name, data: btoa(binary) }));
+  } catch {
+    // Over quota or storage blocked: the template still works for this session.
+  }
+}
+
+function restoreTemplate() {
+  try {
+    const stored = localStorage.getItem(TEMPLATE_KEY);
+    if (!stored) return;
+    const { name, data } = JSON.parse(stored);
+    const binary = atob(data);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    state.template = { name, bytes };
+  } catch {
+    // Unreadable cache is not worth surfacing; the user can pick the file again.
+  }
+}
+
+function renderTemplateState() {
+  const loaded = Boolean(state.template);
+  el.templateState.textContent = loaded
+    ? `Using ${state.template.name} — remembered on this device. Holds up to ${CAPACITY} line items.`
+    : 'Not loaded — pick your .xlsx template to enable export.';
+  el.templateState.classList.toggle('is-ready', loaded);
+  el.templateClear.hidden = !loaded;
+  el.exportAll.disabled = !loaded;
+  el.exportWork.disabled = !loaded;
+  const title = loaded ? '' : 'Load your expense report template first';
+  el.exportAll.title = title;
+  el.exportWork.title = title;
+}
 
 /* ------------------------------------------------------------------ intake */
 
@@ -396,57 +472,53 @@ function sortRows(rows, { key, dir }) {
 /* ------------------------------------------------------------------ export */
 
 el.exportAll.addEventListener('click', () =>
-  downloadCsv(sortRows(visibleRows(), state.sort.all), 'all-expenses.csv'),
+  downloadReport(sortRows(visibleRows(), state.sort.all), 'all-expenses'),
 );
 el.exportWork.addEventListener('click', () =>
-  downloadCsv(sortRows(workRows(), state.sort.work), 'work-expenses.csv'),
+  downloadReport(sortRows(workRows(), state.sort.work), 'work-expenses'),
 );
 
-function downloadCsv(rows, filename) {
+/** Fill the loaded template with these rows and download the result. */
+async function downloadReport(rows, basename) {
+  if (!state.template) {
+    setStatus('Load your expense report template first.', true);
+    return;
+  }
   if (!rows.length) {
     setStatus('Nothing to export in that table.', true);
     return;
   }
-  const header = [
-    'Trans date',
-    'Post date',
-    'Day',
-    'Workday',
-    'Description',
-    'Detail',
-    'Category',
-    'Amount',
-    `Tax (${Math.round(TAX_RATE * 100)}%)`,
-  ];
-  const lines = [header, ...rows.map((t) => [
-    t.transDate || t.transDateRaw,
-    t.postDateRaw,
-    t.weekday === undefined ? '' : DAY_NAMES[t.weekday],
-    t.isWorkday ? 'Yes' : 'No',
-    t.description,
-    t.details,
-    t.category,
-    t.amount.toFixed(2),
-    t.tax.toFixed(2),
-  ])];
-  lines.push([
-    'TOTAL', '', '', '', '', '', '',
-    sum(rows, 'amount').toFixed(2),
-    sum(rows, 'tax').toFixed(2),
-  ]);
 
-  const csv = lines.map((row) => row.map(csvCell).join(',')).join('\r\n');
-  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
+  try {
+    const { bytes, written, dropped } = await fillTemplate(state.template.bytes, rows);
+    const stamp = state.meta.statementDate || new Date().toISOString().slice(0, 10);
+    const filename = `${basename}-${stamp}.xlsx`;
 
-function csvCell(value) {
-  const s = String(value ?? '');
-  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    const blob = new Blob([bytes], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    if (dropped.length) {
+      // Never let rows disappear quietly.
+      setStatus(
+        `Wrote ${written} line items to ${filename}, but the template only holds ` +
+          `${CAPACITY}. ${dropped.length} row(s) did not fit and were left out — ` +
+          `narrow the selection or export in batches.`,
+        true,
+      );
+    } else {
+      setStatus(`Wrote ${written} line ${written === 1 ? 'item' : 'items'} to ${filename}.`);
+    }
+  } catch (err) {
+    console.error(err);
+    setStatus(`Could not fill the template: ${err.message}`, true);
+  }
 }
 
 /* ------------------------------------------------------------------- utils */
@@ -458,3 +530,6 @@ function sum(rows, key) {
 function round2(n) {
   return Math.round(n * 100) / 100;
 }
+
+restoreTemplate();
+renderTemplateState();
