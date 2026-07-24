@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Do My Expenses</title>
+  <link rel="stylesheet" href="src/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>Do My Expenses</h1>
+    <p class="tagline">Drop a credit card statement PDF in. Everything is parsed in your browser — nothing is uploaded.</p>
+  </header>
+
+  <main>
+    <!-- Upload ------------------------------------------------------------ -->
+    <section id="dropzone" class="dropzone">
+      <input type="file" id="file-input" accept="application/pdf,.pdf" hidden />
+      <p class="dropzone__title">Drag a statement PDF here</p>
+      <p class="dropzone__sub">or</p>
+      <button type="button" id="browse" class="btn btn--primary">Choose a PDF</button>
+      <p id="file-name" class="dropzone__file" hidden></p>
+    </section>
+
+    <p id="status" class="status" hidden></p>
+    <div id="warnings" class="warnings" hidden></div>
+
+    <!-- Results ----------------------------------------------------------- -->
+    <div id="results" hidden>
+      <section class="summary">
+        <dl id="meta" class="meta"></dl>
+      </section>
+
+      <div class="controls">
+        <label class="field">
+          <span class="field__label">Search</span>
+          <input type="search" id="search" placeholder="Merchant or category" />
+        </label>
+        <label class="field">
+          <span class="field__label">Category</span>
+          <select id="category-filter"></select>
+        </label>
+        <label class="check">
+          <input type="checkbox" id="workdays-only" />
+          <span>Workdays only</span>
+        </label>
+        <label class="check">
+          <input type="checkbox" id="show-payments" />
+          <span>Include payments</span>
+        </label>
+      </div>
+
+      <!-- Work expenses ------------------------------------------------- -->
+      <section class="table-block">
+        <div class="table-block__head">
+          <h2>Work Expenses</h2>
+          <button type="button" id="export-work" class="btn">Export CSV</button>
+        </div>
+        <p class="hint">Tick a row in <em>All Expenses</em> below to move it up here. Untick to send it back.</p>
+        <div class="table-scroll">
+          <table id="work-table" class="expenses">
+            <thead></thead>
+            <tbody></tbody>
+            <tfoot></tfoot>
+          </table>
+        </div>
+        <p id="work-empty" class="empty">No work expenses selected yet.</p>
+      </section>
+
+      <!-- All expenses -------------------------------------------------- -->
+      <section class="table-block">
+        <div class="table-block__head">
+          <h2>All Expenses</h2>
+          <button type="button" id="export-all" class="btn">Export CSV</button>
+        </div>
+        <div class="table-scroll">
+          <table id="all-table" class="expenses">
+            <thead></thead>
+            <tbody></tbody>
+            <tfoot></tfoot>
+          </table>
+        </div>
+        <p id="all-empty" class="empty" hidden>Nothing matches those filters.</p>
+      </section>
+    </div>
+  </main>
+
+  <script type="module" src="src/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+# Real statements stay local. This repo is published via GitHub Pages, which
+# serves repo contents publicly even when the repo itself is private — a bank
+# statement here would be fetchable by anyone who guesses the filename.
+# The app never uploads anything, so it does not need a statement committed.
+*.pdf
+
+.DS_Store
+node_modules/
